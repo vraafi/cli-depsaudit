@@ -1,16 +1,14 @@
-"""depsaudit: Alat CLI untuk mengaudit requirements.txt.
+#!/usr/bin/env python3
+"""Alat CLI depsaudit untuk mengaudit berkas requirements.txt.
 
-Memeriksa pin longgar, duplikat, versi tidak valid, dan paket tanpa pin.
-Mendukung keluaran JSON dan teks.
+Fungsi utama:
+- Mendeteksi pin longgar (misalnya '>=1.0', '~=2.0', '*', tanpa batas atas).
+- Mendeteksi paket duplikat (nama sama, abaikan case dan ekstra).
+- Mendeteksi versi tidak valid (format versi tidak sesuai PEP 440 secara sederhana).
+- Mendeteksi paket tanpa pin (tanpa operator versi).
 
-Penggunaan:
-    python depsaudit.py requirements.txt
-    python depsaudit.py requirements.txt --json
-
-Exit code:
-    0: tidak ada masalah ditemukan
-    1: ada masalah ditemukan
-    2: berkas tidak ditemukan atau tidak dapat dibaca, atau kesalahan argumen
+Keluaran dapat berupa teks ringkas berbahasa Indonesia atau JSON dengan opsi --json.
+Hanya menggunakan pustaka standar Python 3.11.
 """
 
 import argparse
@@ -18,198 +16,188 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 
-SUMBOY = "depsaudit"
+VERSION_PATTERN = re.compile(
+    r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)(?:\[(?P<extras>[^\]]+)\])?\s*"
+    r"(?:(?P<op>===|==|~=|!=|<=|>=|<|>)\s*(?P<version>[^\s,;]+))?\s*$"
+)
 
-# Pola nama paket sesuai PEP 508 (disederhanakan)
-RE_PAKET = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
+VALID_VERSION_RE = re.compile(
+    r"^(?:\d+!)?\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?(?:\+[a-zA-Z0-9.]+)?$",
+    re.IGNORECASE,
+)
 
-# Operator versi yang valid
-OPERATOR_VALID = {"==", "!=", "<=", ">=", "<", ">", "~=", "==="}
-
-# Pola specifier versi (satu atau lebih, dipisah koma)
-RE_SPEC = re.compile(r"^([<>=!~]=?)\s*([^,\s]+)(?:\s*,\s*([<>=!~]=?)\s*([^,\s]+))*$")
+LOOSE_OPS = {">=", "~=", ">", "!=", "<="}
 
 
-def baca_baris(path: Path) -> list[str]:
-    """Baca berkas requirements.txt dan kembalikan daftar baris (tanpa newline)."""
+def baca_baris(path: Path) -> List[str]:
+    """Membaca berkas requirements.txt dan mengembalikan daftar baris non-kosong."""
     try:
-        return path.read_text(encoding="utf-8").splitlines()
+        with path.open("r", encoding="utf-8") as f:
+            return [line.rstrip("\n") for line in f]
     except FileNotFoundError:
-        print(f"Kesalahan: Berkas '{path}' tidak ditemukan.", file=sys.stderr)
-        sys.exit(2)
+        print(f"Galat: berkas '{path}' tidak ditemukan.", file=sys.stderr)
+        raise SystemExit(2)
     except PermissionError:
-        print(f"Kesalahan: Tidak dapat membaca berkas '{path}' (izin ditolak).", file=sys.stderr)
-        sys.exit(2)
+        print(f"Galat: tidak memiliki izin membaca berkas '{path}'.", file=sys.stderr)
+        raise SystemExit(2)
     except OSError as exc:
-        print(f"Kesalahan: Gagal membaca berkas '{path}': {exc}", file=sys.stderr)
-        sys.exit(2)
+        print(f"Galat: gagal membaca berkas '{path}': {exc}", file=sys.stderr)
+        raise SystemExit(2)
 
 
-def bersihkan_baris(baris: str) -> str | None:
-    """Bersihkan komentar dan spasi, kembalikan None jika baris kosong."""
-    # Hapus komentar (hanya jika '#' di awal atau didahului spasi)
-    hasil = ""
-    for i, ch in enumerate(baris):
-        if ch == "#" and (i == 0 or baris[i - 1].isspace()):
-            break
-        hasil += ch
-    hasil = hasil.strip()
-    return hasil if hasil else None
+def bersihkan_baris(line: str) -> Optional[str]:
+    """Mengembalikan baris yang sudah dibersihkan atau None jika komentar/kosong."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    tanpa_komentar = stripped.split("#", 1)[0].strip()
+    return tanpa_komentar or None
 
 
-def parse_requirement(baris: str) -> dict:
-    """Parse satu baris requirement menjadi komponen."""
-    # Pisahkan specifier dari nama (operators)
-    m = re.match(r"^([A-Za-z0-9._-]+)\s*(.*)$", baris)
+def parse_requirement(line: str, nomor: int) -> Tuple[str, str, List[str]]:
+    """Mengurai baris requirement menjadi (nama, versi, masalah)."""
+    masalah: List[str] = []
+    m = VERSION_PATTERN.match(line)
     if not m:
-        return {
-            "nama": baris,
-            "valid": False,
-            "masalah": ["format tidak valid"],
-            "pin_ketat": False,
-            "operator": None,
-            "versi": None,
-        }
+        masalah.append("format baris tidak dikenali")
+        token = line.split()[0] if line.split() else line
+        return token.lower(), "", masalah
 
-    nama = m.group(1)
-    sisa = m.group(2).strip()
+    name = m.group("name")
+    op = m.group("op")
+    version = m.group("version") or ""
 
-    masalah = []
-    if not RE_PAKET.match(nama):
-        masalah.append("nama paket tidak valid")
-
-    pin_ketat = False
-    operator = None
-    versi = None
-
-    if not sisa:
-        masalah.append("tanpa pin versi")
+    if op is None:
+        masalah.append("paket tanpa pin versi")
     else:
-        # Cek apakah ada ekstra atau marker (tidak didukung penuh, anggap valid jika ada)
-        if sisa.startswith("["):
-            masalah.append("ekstra tidak didukung")
-            sisa = ""
-        elif ";" in sisa:
-            # ada environment marker, ambil bagian specifier saja
-            sisa = sisa.split(";", 1)[0].strip()
+        if op in LOOSE_OPS:
+            masalah.append(f"pin longgar ('{op}')")
+        if version and not VALID_VERSION_RE.match(version):
+            masalah.append(f"versi tidak valid ('{version}')")
+        if op == "==" and version.endswith(".*"):
+            masalah.append("pin wildcard (==x.*)")
+        if version == "*":
+            masalah.append("versi wildcard ('*')")
 
-        if sisa:
-            # Validasi specifier: pisah per koma
-            parts = [p.strip() for p in sisa.split(",")]
-            for part in parts:
-                op_match = re.match(r"^(==|!=|<=|>=|<|>|~=|===)\s*(.+)$", part)
-                if not op_match:
-                    masalah.append(f"specifier tidak valid: '{part}'")
-                    continue
-                op = op_match.group(1)
-                ver = op_match.group(2).strip()
-                if op not in OPERATOR_VALID:
-                    masalah.append(f"operator tidak dikenal: '{op}'")
-                if not ver:
-                    masalah.append(f"versi kosong untuk operator '{op}'")
-                if op == "==" and len(parts) == 1:
-                    pin_ketat = True
-                    operator = op
-                    versi = ver
-                elif operator is None:
-                    operator = op
-                    versi = ver
+    return name.lower(), version, masalah
 
-    return {
-        "nama": nama,
-        "valid": len(masalah) == 0,
-        "masalah": masalah,
-        "pin_ketat": pin_ketat,
-        "operator": operator,
-        "versi": versi,
+
+def audit(baris: List[str]) -> Dict[str, List[dict]]:
+    """Menjalankan audit dan mengembalikan hasil terstruktur."""
+    hasil: Dict[str, List[dict]] = {
+        "pin_longgar": [],
+        "duplikat": [],
+        "versi_tidak_valid": [],
+        "tanpa_pin": [],
+        "format_tidak_dikenal": [],
     }
+    terlihat: Dict[str, int] = {}
 
-
-def audit(baris_list: list[str]) -> list[dict]:
-    """Audit daftar baris requirements, kembalikan daftar temuan."""
-    temuan = []
-    seen: dict[str, list[tuple[int, dict]]] = {}
-
-    for idx, baris in enumerate(baris_list, start=1):
-        bersih = bersihkan_baris(baris)
-        if bersih is None:
+    for idx, line in enumerate(baris, start=1):
+        cleaned = bersihkan_baris(line)
+        if cleaned is None:
             continue
 
-        parsed = parse_requirement(bersih)
-        nama_lower = parsed["nama"].lower()
-        seen.setdefault(nama_lower, []).append((idx, parsed))
+        name, version, masalah = parse_requirement(cleaned, idx)
 
-        if parsed["masalah"]:
-            temuan.append({
-                "baris": idx,
-                "paket": parsed["nama"],
-                "tipe": "tidak_valid",
-                "pesan": "; ".join(parsed["masalah"]),
-            })
-        elif not parsed["pin_ketat"]:
-            temuan.append({
-                "baris": idx,
-                "paket": parsed["nama"],
-                "tipe": "pin_longgar",
-                "pesan": f"pin longgar (operator: {parsed['operator'] or 'tidak ada'})",
-            })
+        if "format baris tidak dikenali" in masalah:
+            hasil["format_tidak_dikenal"].append(
+                {"baris": idx, "konten": cleaned}
+            )
+            continue
 
-    # Deteksi duplikat
-    for nama, daftar in seen.items():
-        if len(daftar) > 1:
-            baris_angka = [d[0] for d in daftar]
-            temuan.append({
-                "baris": baris_angka[0],
-                "paket": nama,
-                "tipe": "duplikat",
-                "pesan": f"paket duplikat pada baris {baris_angka}",
-            })
+        if name in terlihat:
+            hasil["duplikat"].append(
+                {
+                    "baris": idx,
+                    "nama": name,
+                    "kemunculan_pertama": terlihat[name],
+                }
+            )
+        else:
+            terlihat[name] = idx
 
-    temuan.sort(key=lambda x: (x["baris"], x["tipe"]))
-    return temuan
+        if "pin longgar" in " ".join(masalah):
+            hasil["pin_longgar"].append(
+                {"baris": idx, "nama": name, "versi": version or "-"}
+            )
+        if "versi tidak valid" in " ".join(masalah):
+            hasil["versi_tidak_valid"].append(
+                {"baris": idx, "nama": name, "versi": version}
+            )
+        if "paket tanpa pin versi" in " ".join(masalah):
+            hasil["tanpa_pin"].append({"baris": idx, "nama": name})
+
+    return hasil
+
+
+def cetak_teks(hasil: Dict[str, List[dict]]) -> None:
+    """Mencetak hasil audit dalam format teks ringkas berbahasa Indonesia."""
+    total = sum(len(v) for v in hasil.values())
+    print(f"Audit selesai. Total temuan: {total}")
+    for kunci, label in (
+        ("pin_longgar", "Pin longgar"),
+        ("duplikat", "Duplikat"),
+        ("versi_tidak_valid", "Versi tidak valid"),
+        ("tanpa_pin", "Tanpa pin"),
+        ("format_tidak_dikenal", "Format tidak dikenal"),
+    ):
+        items = hasil[kunci]
+        if not items:
+            continue
+        print(f"\n{label} ({len(items)}):")
+        for item in items:
+            if kunci == "duplikat":
+                print(
+                    f"  - baris {item['baris']}: '{item['nama']}' "
+                    f"(pertama di baris {item['kemunculan_pertama']})"
+                )
+            elif kunci == "format_tidak_dikenal":
+                print(f"  - baris {item['baris']}: {item['konten']}")
+            elif kunci == "tanpa_pin":
+                print(f"  - baris {item['baris']}: '{item['nama']}'")
+            else:
+                print(
+                    f"  - baris {item['baris']}: '{item['nama']}' "
+                    f"versi {item.get('versi', '-')}"
+                )
 
 
 def main() -> int:
-    """Titik masuk utama CLI."""
     parser = argparse.ArgumentParser(
         prog="depsaudit",
-        description="Audit requirements.txt: temukan pin longgar, duplikat, versi tidak valid, dan paket tanpa pin.",
-        epilog="Contoh: python depsaudit.py requirements.txt --json",
+        description=(
+            "Audit requirements.txt: temukan pin longgar, duplikat, "
+            "versi tidak valid, dan paket tanpa pin."
+        ),
+        epilog="Contoh: depsaudit requirements.txt --json",
     )
     parser.add_argument(
         "berkas",
         type=Path,
-        help="Path ke berkas requirements.txt yang akan diaudit",
+        nargs="?",
+        default=Path("requirements.txt"),
+        help="Path ke requirements.txt (default: requirements.txt)",
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        dest="json_output",
         help="Keluarkan hasil dalam format JSON",
     )
+
     args = parser.parse_args()
+    baris = baca_baris(args.berkas)
+    hasil = audit(baris)
 
-    baris_list = baca_baris(args.berkas)
-    temuan = audit(baris_list)
-
-    if args.json_output:
-        hasil = {
-            "berkas": str(args.berkas),
-            "jumlah_masalah": len(temuan),
-            "temuan": temuan,
-        }
-        print(json.dumps(hasil, ensure_ascii=False, indent=2))
+    if args.json:
+        print(json.dumps(hasil, indent=2, ensure_ascii=False))
     else:
-        if not temuan:
-            print(f"Tidak ada masalah ditemukan pada '{args.berkas}'.")
-        else:
-            print(f"Ditemukan {len(temuan)} masalah pada '{args.berkas}':")
-            for t in temuan:
-                print(f"  Baris {t['baris']}: [{t['tipe']}] {t['paket']} - {t['pesan']}")
+        cetak_teks(hasil)
 
-    return 0 if not temuan else 1
+    return 0
 
 
 if __name__ == "__main__":

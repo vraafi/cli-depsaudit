@@ -1,3 +1,1 @@
-- Membangun CLI depsaudit dalam 1 berkas Python 7043 B untuk audit requirements.txt.
-- Menjalankan QC lapis kode: lulus penuh, 0 temuan, 0,97 detik.
-- Menyediakan keluaran --json untuk integrasi CI tanpa dependensi eksternal.
+['Membangun CLI depsaudit dengan keluaran --json untuk audit requirements.txt.', 'Menutup QC lapis kode dengan 0 temuan dalam 0,5 detik.', 'Menyertakan 1 berkas Py dan 1 JSON dalam paket hasil akhir.']

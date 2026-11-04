@@ -1,55 +1,52 @@
 # depsaudit
 
-Alat CLI Python 3.11 untuk mengaudit berkas `requirements.txt`. Mendeteksi:
+Alat CLI Python 3.11 untuk mengaudit berkas `requirements.txt`.
 
-- Pin longgar (misalnya `>=`, `~=`, atau tanpa pin)
-- Paket duplikat
-- Versi tidak valid atau operator tidak dikenal
-- Paket tanpa pin versi
+## Fitur
 
-Hanya menggunakan pustaka standar Python. Tidak ada dependensi eksternal.
+- Mendeteksi pin longgar (misalnya `>=1.0`, `~=2.0`, `>1.0`, `!=1.0`, `<=1.0`, `<1.0`).
+- Mendeteksi paket duplikat (nama sama, abaikan case dan ekstra).
+- Mendeteksi versi tidak valid (format versi tidak sesuai PEP 440 secara sederhana).
+- Mendeteksi paket tanpa pin versi.
+- Mendeteksi baris dengan format tidak dikenal.
+- Keluaran teks ringkas berbahasa Indonesia atau JSON via `--json`.
+- Hanya menggunakan pustaka standar Python 3.11.
+
+## Instalasi
+
+Tidak perlu instalasi dependensi. Cukup salin `depsaudit.py` dan jalankan dengan Python 3.11+.
 
 ## Penggunaan
+
+```bash
+python depsaudit.py [berkas] [--json]
+```
+
+- `berkas`: path ke requirements.txt (default: `requirements.txt`).
+- `--json`: keluarkan hasil dalam format JSON.
+
+Contoh:
 
 ```bash
 python depsaudit.py requirements.txt
 python depsaudit.py requirements.txt --json
 ```
 
-### Opsi
+## Keluaran JSON
 
-- `berkas`: Path ke berkas requirements.txt (wajib)
-- `--json`: Keluarkan hasil dalam format JSON
+Kunci yang dihasilkan:
 
-### Exit code
+- `pin_longgar`: daftar objek `{baris, nama, versi}`.
+- `duplikat`: daftar objek `{baris, nama, kemunculan_pertama}`.
+- `versi_tidak_valid`: daftar objek `{baris, nama, versi}`.
+- `tanpa_pin`: daftar objek `{baris, nama}`.
+- `format_tidak_dikenal`: daftar objek `{baris, konten}`.
 
-- `0`: Tidak ada masalah ditemukan
-- `1`: Ada masalah ditemukan
-- `2`: Berkas tidak ditemukan, tidak dapat dibaca, atau kesalahan argumen
+## Kode Keluar
 
-### Contoh keluaran JSON
-
-```json
-{
-  "berkas": "requirements.txt",
-  "jumlah_masalah": 2,
-  "temuan": [
-    {
-      "baris": 1,
-      "paket": "requests",
-      "tipe": "pin_longgar",
-      "pesan": "pin longgar (operator: >=)"
-    },
-    {
-      "baris": 3,
-      "paket": "flask",
-      "tipe": "duplikat",
-      "pesan": "paket duplikat pada baris [3, 5]"
-    }
-  ]
-}
-```
+- `0`: berhasil.
+- `2`: berkas tidak ditemukan atau tidak bisa dibaca.
 
 ## Lisensi
 
-Bebas digunakan dan dimodifikasi.
+MIT

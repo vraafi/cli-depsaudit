@@ -26,13 +26,13 @@
    "jumlah_berkas": {
     "py": 1,
     "js": 0,
-    "json": 0,
+    "json": 1,
     "lua": 0,
-    "lain": 1
+    "lain": 4
    },
-   "jumlah_diperiksa": 2,
-   "detik": 0.97,
-   "diperiksa": "2026-11-03T14:02:42+07:00"
+   "jumlah_diperiksa": 6,
+   "detik": 0.5,
+   "diperiksa": "2026-11-04T21:25:52+07:00"
   },
   "visual": {
    "lapis": "visual",
@@ -42,7 +42,7 @@
    "vonis": "tidak berlaku",
    "temuan": [],
    "sebab": "tidak ada URL UI",
-   "diperiksa": "2026-11-03T14:02:42+07:00"
+   "diperiksa": "2026-11-04T21:25:52+07:00"
   },
   "pengguna": {
    "lapis": "pengguna",
@@ -52,17 +52,24 @@
    "vonis": "tidak berlaku",
    "temuan": [],
    "sebab": "tidak ada URL UI",
-   "diperiksa": "2026-11-03T14:02:42+07:00"
+   "diperiksa": "2026-11-04T21:25:52+07:00"
   }
  },
- "detik": 0.97,
- "diperiksa": "2026-11-03T14:02:42+07:00",
+ "override_deterministik": {
+  "diterapkan": false,
+  "hijau": true,
+  "dibatalkan": [],
+  "bertahan": [],
+  "catatan": ""
+ },
+ "detik": 0.5,
+ "diperiksa": "2026-11-04T21:25:52+07:00",
  "target": "C:\\Users\\user\\otonom-penuh\\workspace\\trust-test\\cli-depsaudit",
  "url": null,
  "uji_jalan": {
   "ok": true,
   "kode": 0,
-  "keluaran": "usage: depsaudit [-h] [--json] berkas\n\nAudit requirements.txt: temukan pin longgar, duplikat, versi tidak valid, dan\npaket tanpa pin.\n\npositional arguments:\n  berkas      Path ke berkas requirements.txt yang akan diaudit\n\noptions:\n  -h, --help  show this help message and exit\n  --json      Keluarkan hasil dalam format JSON\n\nContoh: python depsaudit.py requirements.txt --json\n",
+  "keluaran": "usage: depsaudit [-h] [--json] [berkas]\n\nAudit requirements.txt: temukan pin longgar, duplikat, versi tidak valid, dan\npaket tanpa pin.\n\npositional arguments:\n  berkas      Path ke requirements.txt (default: requirements.txt)\n\noptions:\n  -h, --help  show this help message and exit\n  --json      Keluarkan hasil dalam format JSON\n\nContoh: depsaudit requirements.txt --json\n",
   "galat": ""
  }
 }

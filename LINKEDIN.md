@@ -1,7 +1,7 @@
-Kami mengaudit requirements.txt dengan alat sendiri. depsaudit menemukan pin longgar, duplikat, versi tidak valid, dan paket tanpa pin. Keluarannya bisa JSON, jadi langsung dipakai di CI.
+Kami menutup QC depsaudit di lapis kode. Waktu: 0,5 detik. Temuan: 0. Lapis aktif hanya kode, dan lapis itu lulus.
 
-Satu berkas Python, 7043 B, tanpa dependensi eksternal. README 1157 B menjelaskan pemakaian dan format keluaran. QC lapis kode lulus penuh dalam 0,97 detik dengan 0 temuan.
+depsaudit adalah CLI yang mengaudit requirements.txt: pin longgar, duplikat, versi tidak valid, dan paket tanpa pin. Keluaran --json membuat hasilnya bisa dipakai pipeline, bukan hanya dibaca mata.
 
-Kami tidak mengklaim lebih dari itu. Cakupan baru requirements.txt, belum poetry atau pipenv. Deteksi duplikat masih per baris, bukan resolusi transitif. Angka 0 temuan berlaku pada berkas uji, bukan jaminan untuk semua repo.
+Kami tidak mengklaim lebih dari yang diuji. Lapis runtime dan integrasi belum aktif. Angka 0 temuan berlaku pada berkas uji, bukan seluruh repositori.
 
-Langkah berikut: jalankan `depsaudit --json` di satu repositori Anda minggu ini dan bagikan temuan pertama ke tim. #depsaudit #ci #python
+Langkah berikutnya konkret: jalankan `depsaudit --json` di CI pada satu repositori nyata minggu ini, lalu perluas cakupan lapis QC. #Python #CLI #DevOps

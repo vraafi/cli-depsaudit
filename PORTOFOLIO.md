@@ -1,14 +1,19 @@
 ## Masalah
-Tim engineering sering membiarkan requirements.txt membusuk. Pin longgar seperti `flask>=0.10` dan paket tanpa pin membuat build tidak reproducible. Duplikat dan versi tidak valid lolos review karena tidak ada pemeriksaan otomatis.
+
+Tim engineering menumpuk dependensi di `requirements.txt` tanpa disiplin. Pin longgar, duplikat, versi tidak valid, dan paket tanpa pin lolos ke review. Audit manual lambat dan tidak konsisten.
 
 ## Yang Dibangun
-depsaudit, CLI yang mengaudit requirements.txt. Ia mendeteksi pin longgar, baris duplikat, versi tidak valid, dan paket tanpa pin. Setiap temuan mengikuti format konsisten. Flag `--json` mengeluarkan hasil mesin-baca agar langsung masuk pipeline CI.
+
+`depsaudit` adalah CLI Python yang membaca `requirements.txt` dan melaporkan empat kelas masalah: pin longgar, duplikat, versi tidak valid, dan paket tanpa pin. Mode `--json` menghasilkan keluaran terstruktur untuk dipakai pipeline CI. Kode inti ada di `depsaudit.py` (6852 B) dengan dokumentasi `README.md` (1404 B).
 
 ## Keputusan Teknis
-Audit berjalan murni di lapisan kode. Satu berkas Python (7043 B) menangani parsing, validasi, dan pelaporan tanpa dependensi eksternal. README 1157 B mendokumentasikan pemakaian dan format keluaran. Keputusan ini menjaga alat ringan dan mudah ditanam di runner mana pun. Logika validasi dipisah dari presentasi agar kelak bisa menambah format keluaran tanpa mengubah inti.
 
-## Bukti (angka QC)
-QC mencatat 0,97 detik untuk seluruh pemeriksaan. Lapis aktif: kode. Lapis lulus: kode. Temuan QC: 0. Komposisi kode: 1 Python, 1 berkas lain. Tidak ada lapis JS, JSON, atau Lua; cakupan itu tidak diklaim.
+Kami pisahkan lapis kode sebagai satu-satunya lapis yang diuji. Audit berjalan tanpa dependensi eksternal berat agar bisa dipanggil di runner mana pun. Format `--json` dipilih supaya hasil bisa dikonsumsi mesin lain, bukan dibaca manusia saja.
+
+## Bukti
+
+QC selesai dalam 0,5 detik. Lapis aktif: kode. Lapis lulus: kode. Temuan: 0. Berkas diperiksa: 1 Python, 0 JavaScript, 1 JSON, 0 Lua, 4 lain.
 
 ## Batasan
-Alat hanya membaca requirements.txt, belum menangani poetry, pipenv, atau constraint files. Deteksi duplikat berbasis baris, bukan resolusi dependensi transitif. Belum ada uji adversarial terhadap nama paket eksotis. Angka 0 temuan berlaku pada berkas uji saat QC, bukan jaminan untuk semua repositori.
+
+QC baru mencakup lapis kode. Lapis runtime dan integrasi belum diaktifkan. Angka temuan 0 berlaku pada berkas uji, bukan pada seluruh repositori pengguna.
